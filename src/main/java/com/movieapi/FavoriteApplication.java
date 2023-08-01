@@ -1,5 +1,6 @@
 package com.movieapi;
 
+import io.opentelemetry.api.metrics.Meter;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -22,6 +23,7 @@ import io.opentelemetry.sdk.trace.export.SimpleSpanProcessor;
 import io.opentelemetry.sdk.trace.export.SpanExporter;
 import io.opentelemetry.exporter.otlp.trace.OtlpGrpcSpanExporter;
 import io.opentelemetry.sdk.logs.SdkLoggerProvider;
+import io.opentelemetry.sdk.trace.export.BatchSpanProcessor;
 
 import io.opentelemetry.sdk.resources.Resource;
 import io.opentelemetry.sdk.trace.SdkTracerProvider;
@@ -41,24 +43,49 @@ public class FavoriteApplication {
 	private static final Logger logger = LoggerFactory.getLogger(FavoriteApplication.class);
 
 	public static void main(String[] args) {
+
+		String SERVICE_NAME = System.getenv("OTEL_SERVICE_NAME");
+
 		// set service name on all OTel signals
 		Resource resource = Resource.getDefault().merge(Resource.create(
-				Attributes.of(ResourceAttributes.SERVICE_NAME, "YEAH")));
+				Attributes.of(ResourceAttributes.SERVICE_NAME, SERVICE_NAME)));
 
 		// init OTel logger provider with export to OTLP
 		SdkLoggerProvider sdkLoggerProvider = SdkLoggerProvider.builder()
 				.setResource(resource)
 				.addLogRecordProcessor(BatchLogRecordProcessor.builder(
 								OtlpGrpcLogRecordExporter.builder().setEndpoint(
-												System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")).addHeader("Authorization", "Bearer " + "4vTrwtqNQoArqAXV8H")
+												System.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")).addHeader("Authorization", "Bearer " + System.getenv("ELASTIC_APM_SECRET_TOKEN"))
 
+										.build())
+						.build())
+				.build();
+
+		// init OTel trace provider with export to OTLP
+		SdkTracerProvider sdkTracerProvider = SdkTracerProvider.builder()
+				.setResource(resource).setSampler(Sampler.alwaysOn())
+				// add span processor to add baggage as span attributes
+				.addSpanProcessor(BatchSpanProcessor.builder(OtlpGrpcSpanExporter
+						.builder()
+						.setEndpoint(System.getenv(
+								"OTEL_EXPORTER_OTLP_ENDPOINT")).addHeader("Authorization", "Bearer " + System.getenv("ELASTIC_APM_SECRET_TOKEN"))
+						.build()).build())
+				.build();
+
+		// init OTel meter provider with export to OTLP
+		SdkMeterProvider sdkMeterProvider = SdkMeterProvider.builder().setResource(resource)
+				.registerMetricReader(PeriodicMetricReader.builder(
+								OtlpGrpcMetricExporter.builder().setEndpoint(System
+												.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")).addHeader("Authorization", "Bearer " + System.getenv("ELASTIC_APM_SECRET_TOKEN"))
 										.build())
 						.build())
 				.build();
 
 		// create sdk object and set it as global
 		OpenTelemetrySdk sdk = OpenTelemetrySdk.builder()
+				.setTracerProvider(sdkTracerProvider)
 				.setLoggerProvider(sdkLoggerProvider)
+				.setMeterProvider(sdkMeterProvider)
 				.setPropagators(ContextPropagators
 						.create(W3CTraceContextPropagator.getInstance()))
 				.build();
@@ -71,19 +98,4 @@ public class FavoriteApplication {
 
 		SpringApplication.run(FavoriteApplication.class, args);
 	}
-
-	/*@RestController
-	public class HelloController {
-
-		@GetMapping("/")
-		public String index() {
-			logger.info("Main request successfull");
-			logger.info("Main request successfull");
-			logger.info("Main request successfull");
-			logger.info("Main request successfull");
-			logger.info("Main request successfull");
-			logger.info("Main request successfull");
-			return "Hello, world!";
-		}
-	}*/
 }
