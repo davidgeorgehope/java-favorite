@@ -81,7 +81,12 @@
       <artifactId>opentelemetry-logback-appender-1.0</artifactId>
       <version>1.25.1-alpha</version>
     </dependency>
-
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>javax.servlet-api</artifactId>
+      <version>4.0.1</version>
+      <scope>provided</scope>
+    </dependency>
     <dependency>
       <groupId>io.opentelemetry.instrumentation</groupId>
       <artifactId>opentelemetry-logback-mdc-1.0</artifactId>
